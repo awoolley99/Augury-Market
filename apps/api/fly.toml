@@ -1,0 +1,35 @@
+# Fly.io config for the Augury Market API.
+# Deploy from apps/api/: fly launch --no-deploy (first time) then fly deploy
+app = "augury-market-api"
+primary_region = "iad"
+
+[build]
+
+[env]
+  ENVIRONMENT = "production"
+  DEBUG = "false"
+  API_V1_PREFIX = "/api/v1"
+  ACCESS_TOKEN_EXPIRE_MINUTES = "30"
+  REFRESH_TOKEN_EXPIRE_DAYS = "14"
+  MARKET_DATA_PROVIDER = "stub"
+  # CORS_ORIGINS_RAW, DATABASE_URL, DATABASE_URL_SYNC, SECRET_KEY are set as
+  # secrets (fly secrets set ...) — never checked in here.
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "15s"
+    interval = "30s"
+    method = "GET"
+    timeout = "5s"
+    path = "/health"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

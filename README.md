@@ -9,12 +9,13 @@ recommendation.
 | Milestone | Contents | Status |
 |---|---|---|
 | 1 | Monorepo, Docker, FastAPI + Postgres + auth, Next.js shell, Watchlist CRUD | **Done** |
-| 2 | Market data ingestion + Stock Scanner Engine (Module 6) | Not started |
+| 2 | Market data ingestion + Stock Scanner Engine (Module 6) | **Done** |
 | 3 | Confidence Score Engine (Module 7) | Not started |
 | 4 | AI Summary Engine (Module 8) | Not started |
 | 5 | Full Dashboard Data Layer + morning briefing (Module 9/10) | Not started |
 
-See `docs/adr/` for the reasoning behind the core architectural choices.
+See `docs/adr/` for the reasoning behind the core architectural choices, and
+`docs/deploy-flyio.md` for deploying to Fly.io.
 
 ## Repo layout
 
@@ -84,10 +85,19 @@ Tests run against an in-memory SQLite database (no Postgres needed) — see
 
 ## What's real vs. stubbed in Milestone 1
 
-**Real and tested:** registration, login, JWT access/refresh tokens, `/auth/me`,
+**Real and tested (Milestone 1):** registration, login, JWT access/refresh tokens, `/auth/me`,
 full watchlist CRUD (create/list/delete watchlists, add/remove tickers),
 ownership checks (users can't touch each other's watchlists).
 
-**Deliberately stubbed:** the dashboard shows a static explanatory note instead
-of live market data, scores, or AI reports — those are Modules 6–10, built in
-Milestones 2–5.
+**Real and tested (Milestone 2):** the Stock Scanner Engine — universe loader
+(curated ~35-ticker sample), indicator engine (SMA/EMA/RSI/MACD, unit tested
+against known values), risk analyzer (volatility + drawdown + negative-news
+heuristics), and evidence packet storage, all wired to a live `/scanner/run`
+endpoint and rendered on the dashboard. Verified end-to-end against a real
+Postgres instance (not just SQLite/mocks) during development.
+
+**Deliberately stubbed:** market data comes from `StubMarketDataProvider` —
+deterministic synthetic prices/fundamentals/news, not real market data (see
+ADR 0005). No real vendor (Polygon/Alpaca/IEX) is wired up yet, and there's
+no Confidence Score, AI summary, or "Buy/Avoid" recommendation anywhere —
+those are Modules 7/8 (Milestones 3/4).

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, WatchlistRead, ApiError } from "@/lib/api";
+import { api, WatchlistRead, EvidencePacketRead, ApiError } from "@/lib/api";
 
 function firstName(fullName: string | null, email: string): string {
   if (fullName) return fullName.split(" ")[0];
@@ -14,6 +14,9 @@ export default function DashboardPage() {
   const { user, accessToken, loading, logout } = useAuth();
   const router = useRouter();
   const [watchlists, setWatchlists] = useState<WatchlistRead[]>([]);
+  const [evidence, setEvidence] = useState<EvidencePacketRead[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [tickerDrafts, setTickerDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -33,6 +36,42 @@ export default function DashboardPage() {
       .catch((err) => setError(err instanceof ApiError ? err.message : "Couldn't load watchlists"))
       .finally(() => setDataLoading(false));
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+    const allTickers = Array.from(new Set(watchlists.flatMap((w) => w.items.map((i) => i.ticker))));
+    if (allTickers.length === 0) {
+      setEvidence([]);
+      return;
+    }
+    api
+      .listEvidence(accessToken, allTickers)
+      .then(setEvidence)
+      .catch(() => setEvidence([]));
+  }, [accessToken, watchlists]);
+
+  async function handleRunScan() {
+    if (!accessToken) return;
+    setScanning(true);
+    setScanMessage(null);
+    try {
+      const result = await api.runScan(accessToken);
+      setScanMessage(
+        `Scanned ${result.processed_count} tickers as of ${result.as_of_date}${
+          result.failed_count > 0 ? ` (${result.failed_count} failed)` : ""
+        }.`
+      );
+      const allTickers = Array.from(new Set(watchlists.flatMap((w) => w.items.map((i) => i.ticker))));
+      if (allTickers.length > 0) {
+        const fresh = await api.listEvidence(accessToken, allTickers);
+        setEvidence(fresh);
+      }
+    } catch (err) {
+      setScanMessage(err instanceof ApiError ? err.message : "Scan failed.");
+    } finally {
+      setScanning(false);
+    }
+  }
 
   async function handleCreateWatchlist(e: React.FormEvent) {
     e.preventDefault();
@@ -101,11 +140,65 @@ export default function DashboardPage() {
       </header>
 
       <section className="rounded-lg border border-ink-700 bg-ink-900 p-5 mb-8">
-        <p className="text-hush text-sm leading-relaxed">
-          The scanner, confidence engine, and AI research reports aren&apos;t wired up yet —
-          this milestone ships accounts and watchlists so the rest of the platform has
-          somewhere real to attach to. Add tickers below to start tracking them.
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-xl text-parchment">Market snapshot</h2>
+          <button
+            onClick={handleRunScan}
+            disabled={scanning}
+            className="rounded-md bg-signal text-ink-950 text-sm font-medium px-3 py-1.5 hover:bg-signal-dim transition-colors disabled:opacity-50"
+          >
+            {scanning ? "Scanning…" : "Run scanner"}
+          </button>
+        </div>
+
+        <p className="text-hush text-sm leading-relaxed mb-4">
+          Raw scanner evidence (Module 6) for tickers on your watchlists — price, momentum,
+          fundamentals, news sentiment, and a risk score. The Confidence Score Engine that
+          turns this into a single Buy/Hold/Avoid rating isn&apos;t built yet (Milestone 3),
+          so nothing below is a recommendation.
         </p>
+
+        {scanMessage && <p className="text-signal text-sm mb-4">{scanMessage}</p>}
+
+        {evidence.length === 0 ? (
+          <p className="text-hush text-sm">
+            No evidence yet. Add tickers to a watchlist below, then run the scanner.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {evidence.map((e) => (
+              <div key={e.ticker} className="rounded-md border border-ink-700 bg-ink-800 p-4">
+                <div className="flex items-baseline justify-between mb-2">
+                  <span className="font-mono font-semibold text-parchment">{e.ticker}</span>
+                  <span className="font-mono text-parchment">${e.close_price.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-hush mb-2">
+                  <span>{e.sector}</span>
+                  {e.pct_above_sma_200 !== null && (
+                    <span className={e.pct_above_sma_200 >= 0 ? "text-rise" : "text-fall"}>
+                      {e.pct_above_sma_200 >= 0 ? "+" : ""}
+                      {(e.pct_above_sma_200 * 100).toFixed(1)}% vs 200-day
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-4 text-xs">
+                  <span className="text-hush">
+                    RSI <span className="text-parchment font-mono">{e.rsi_14?.toFixed(0) ?? "—"}</span>
+                  </span>
+                  <span className="text-hush">
+                    Sentiment{" "}
+                    <span className={e.avg_news_sentiment >= 0 ? "text-rise font-mono" : "text-fall font-mono"}>
+                      {e.avg_news_sentiment.toFixed(2)}
+                    </span>
+                  </span>
+                  <span className="text-hush">
+                    Risk <span className="text-signal font-mono">{e.risk_score}</span>
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section>

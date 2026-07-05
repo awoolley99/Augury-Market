@@ -68,6 +68,36 @@ export interface WatchlistRead {
   items: WatchlistItemRead[];
 }
 
+export interface EvidencePacketRead {
+  ticker: string;
+  as_of_date: string;
+  sector: string;
+  close_price: number;
+  sma_50: number | null;
+  sma_200: number | null;
+  rsi_14: number | null;
+  macd_histogram: number | null;
+  pct_above_sma_200: number | null;
+  revenue_growth_yoy: number;
+  pe_ratio: number | null;
+  institutional_ownership_pct: number;
+  market_cap: number;
+  avg_news_sentiment: number;
+  catalyst_count: number;
+  news_headlines: string[];
+  risk_score: number;
+  risk_factors: string[];
+  created_at: string;
+}
+
+export interface ScanRunResult {
+  as_of_date: string;
+  processed_count: number;
+  failed_count: number;
+  processed: string[];
+  failed: string[];
+}
+
 export const api = {
   register: (email: string, password: string, fullName?: string) =>
     request<UserRead>("/auth/register", {
@@ -108,4 +138,13 @@ export const api = {
       method: "DELETE",
       token,
     }),
+
+  runScan: (token: string) =>
+    request<ScanRunResult>("/scanner/run", { method: "POST", token }),
+
+  listEvidence: (token: string, tickers?: string[]) =>
+    request<EvidencePacketRead[]>(
+      `/scanner/evidence${tickers && tickers.length ? `?tickers=${tickers.join(",")}` : ""}`,
+      { token }
+    ),
 };
