@@ -36,14 +36,32 @@ def _seed_for(ticker: str, salt: str = "") -> int:
     return int(digest[:16], 16)
 
 
+def _quality_for(ticker: str) -> float:
+    """
+    A per-ticker latent 'how good is this company, broadly' factor in [0,1],
+    seeded so it's deterministic. Real companies have correlated
+    fundamentals (a genuinely strong business tends to show good revenue
+    growth AND institutional interest AND price momentum together) -- this
+    lets the stub reflect that instead of drawing every metric fully
+    independently, which would wash out any real spread in confidence
+    scores across the universe.
+    """
+    rng = random.Random(_seed_for(ticker, "quality"))
+    return rng.random()
+
+
 class StubMarketDataProvider(MarketDataProvider):
     def get_price_history(self, ticker: str, days: int = 200) -> list[PriceBar]:
         rng = random.Random(_seed_for(ticker, "prices"))
+        quality = _quality_for(ticker)
 
         # Start price varies by ticker but stays in a plausible equity range.
         price = 20 + (rng.random() * 480)
-        # Mild upward or downward drift, consistent for a given ticker.
-        drift = rng.uniform(-0.0015, 0.0025)
+        # Drift correlates with quality: stronger companies trend up more.
+        drift = rng.uniform(-0.0010, 0.0006) + quality * 0.0032
+        # Volatility inversely correlates with quality: stronger, more
+        # established companies tend to be somewhat less volatile.
+        daily_vol = rng.uniform(0.005, 0.011) + (1 - quality) * 0.012
 
         bars: list[PriceBar] = []
         today = date.today()
@@ -51,7 +69,7 @@ class StubMarketDataProvider(MarketDataProvider):
             trade_date = today - timedelta(days=i)
             if trade_date.weekday() >= 5:  # skip weekends
                 continue
-            daily_return = drift + rng.gauss(0, 0.018)
+            daily_return = drift + rng.gauss(0, daily_vol)
             open_price = price
             close_price = max(0.5, price * (1 + daily_return))
             high = max(open_price, close_price) * (1 + abs(rng.gauss(0, 0.006)))
@@ -74,16 +92,20 @@ class StubMarketDataProvider(MarketDataProvider):
 
     def get_fundamentals(self, ticker: str) -> Fundamentals:
         rng = random.Random(_seed_for(ticker, "fundamentals"))
+        quality = _quality_for(ticker)
         return Fundamentals(
-            revenue_growth_yoy=round(rng.uniform(-0.10, 0.45), 3),
-            pe_ratio=round(rng.uniform(8, 60), 1) if rng.random() > 0.05 else None,
-            institutional_ownership_pct=round(rng.uniform(0.35, 0.92), 3),
+            revenue_growth_yoy=round(-0.08 + quality * 0.45 + rng.uniform(-0.06, 0.06), 3),
+            pe_ratio=round(48 - quality * 28 + rng.uniform(-8, 8), 1) if rng.random() > 0.05 else None,
+            institutional_ownership_pct=round(
+                0.40 + quality * 0.42 + rng.uniform(-0.05, 0.05), 3
+            ),
             market_cap=round(rng.uniform(2e9, 3.2e12), 0),
             sector=_SECTORS[rng.randrange(len(_SECTORS))],
         )
 
     def get_recent_news(self, ticker: str, limit: int = 5) -> list[NewsItem]:
         rng = random.Random(_seed_for(ticker, "news"))
+        quality = _quality_for(ticker)
         today = date.today()
         count = min(limit, len(_HEADLINE_TEMPLATES))
         chosen = rng.sample(_HEADLINE_TEMPLATES, k=count)
@@ -91,7 +113,8 @@ class StubMarketDataProvider(MarketDataProvider):
         items = []
         for i, (template, base_sentiment, is_catalyst) in enumerate(chosen):
             jitter = rng.uniform(-0.15, 0.15)
-            sentiment = max(-1.0, min(1.0, base_sentiment + jitter))
+            quality_bias = (quality - 0.5) * 0.9
+            sentiment = max(-1.0, min(1.0, base_sentiment + jitter + quality_bias))
             items.append(
                 NewsItem(
                     headline=template.format(ticker=ticker.upper()),

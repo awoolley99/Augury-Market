@@ -63,9 +63,12 @@ def compute_risk_score(bars: list[PriceBar], news: list[NewsItem]) -> tuple[int,
     drawdown = max_drawdown(bars) or 0.0
     flags = news_risk_flags(news)
 
-    # Volatility: 0-15% annualized -> low, 15-40% -> moderate, 40%+ -> high
-    vol_score = min(50, vol * 125)
-    drawdown_score = min(30, drawdown * 100)
+    # Typical large-cap annualized volatility (15-30%) and a normal
+    # peak-to-trough drawdown (10-20% over ~10 months) shouldn't read as
+    # "elevated risk" on their own -- only genuinely high volatility/
+    # drawdown or bad news should push the score up meaningfully.
+    vol_score = min(40, vol * 80)
+    drawdown_score = min(25, drawdown * 60)
     news_score = min(20, len(flags) * 10)
 
     total = round(vol_score + drawdown_score + news_score)

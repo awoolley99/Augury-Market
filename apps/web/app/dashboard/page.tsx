@@ -3,11 +3,24 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, WatchlistRead, EvidencePacketRead, ApiError } from "@/lib/api";
+import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, ApiError } from "@/lib/api";
 
 function firstName(fullName: string | null, email: string): string {
   if (fullName) return fullName.split(" ")[0];
   return email.split("@")[0];
+}
+
+function recommendationColor(recommendation: string): string {
+  switch (recommendation) {
+    case "Strong Buy Candidate":
+      return "bg-rise text-ink-950";
+    case "Buy Candidate":
+      return "bg-rise/70 text-ink-950";
+    case "Watch / Hold":
+      return "bg-signal/80 text-ink-950";
+    default:
+      return "bg-fall/20 text-fall";
+  }
 }
 
 export default function DashboardPage() {
@@ -15,6 +28,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [watchlists, setWatchlists] = useState<WatchlistRead[]>([]);
   const [evidence, setEvidence] = useState<EvidencePacketRead[]>([]);
+  const [confidence, setConfidence] = useState<Record<string, ConfidenceRead>>({});
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -42,12 +56,19 @@ export default function DashboardPage() {
     const allTickers = Array.from(new Set(watchlists.flatMap((w) => w.items.map((i) => i.ticker))));
     if (allTickers.length === 0) {
       setEvidence([]);
+      setConfidence({});
       return;
     }
     api
       .listEvidence(accessToken, allTickers)
       .then(setEvidence)
       .catch(() => setEvidence([]));
+    api
+      .listConfidence(accessToken, allTickers)
+      .then((results) => {
+        setConfidence(Object.fromEntries(results.map((r) => [r.ticker, r])));
+      })
+      .catch(() => setConfidence({}));
   }, [accessToken, watchlists]);
 
   async function handleRunScan() {
@@ -65,6 +86,8 @@ export default function DashboardPage() {
       if (allTickers.length > 0) {
         const fresh = await api.listEvidence(accessToken, allTickers);
         setEvidence(fresh);
+        const freshConfidence = await api.listConfidence(accessToken, allTickers);
+        setConfidence(Object.fromEntries(freshConfidence.map((r) => [r.ticker, r])));
       }
     } catch (err) {
       setScanMessage(err instanceof ApiError ? err.message : "Scan failed.");
@@ -152,10 +175,10 @@ export default function DashboardPage() {
         </div>
 
         <p className="text-hush text-sm leading-relaxed mb-4">
-          Raw scanner evidence (Module 6) for tickers on your watchlists — price, momentum,
-          fundamentals, news sentiment, and a risk score. The Confidence Score Engine that
-          turns this into a single Buy/Hold/Avoid rating isn&apos;t built yet (Milestone 3),
-          so nothing below is a recommendation.
+          Confidence scores (Module 7) are deterministic — the same weighted formula over
+          business quality, momentum, valuation, news/catalysts, institutional activity, and
+          sentiment, minus a risk adjustment. Nothing here is AI-generated commentary yet;
+          that&apos;s Milestone 4.
         </p>
 
         {scanMessage && <p className="text-signal text-sm mb-4">{scanMessage}</p>}
@@ -166,37 +189,56 @@ export default function DashboardPage() {
           </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {evidence.map((e) => (
-              <div key={e.ticker} className="rounded-md border border-ink-700 bg-ink-800 p-4">
-                <div className="flex items-baseline justify-between mb-2">
-                  <span className="font-mono font-semibold text-parchment">{e.ticker}</span>
-                  <span className="font-mono text-parchment">${e.close_price.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-hush mb-2">
-                  <span>{e.sector}</span>
-                  {e.pct_above_sma_200 !== null && (
-                    <span className={e.pct_above_sma_200 >= 0 ? "text-rise" : "text-fall"}>
-                      {e.pct_above_sma_200 >= 0 ? "+" : ""}
-                      {(e.pct_above_sma_200 * 100).toFixed(1)}% vs 200-day
+            {evidence.map((e) => {
+              const c = confidence[e.ticker];
+              return (
+                <div key={e.ticker} className="rounded-md border border-ink-700 bg-ink-800 p-4">
+                  <div className="flex items-baseline justify-between mb-2">
+                    <span className="font-mono font-semibold text-parchment">{e.ticker}</span>
+                    <span className="font-mono text-parchment">${e.close_price.toFixed(2)}</span>
+                  </div>
+
+                  {c && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span
+                        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${recommendationColor(c.recommendation)}`}
+                      >
+                        {c.recommendation}
+                      </span>
+                      <span className="font-mono text-xs text-hush">{c.total_score.toFixed(1)}/10</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3 text-xs text-hush mb-2">
+                    <span>{e.sector}</span>
+                    {e.pct_above_sma_200 !== null && (
+                      <span className={e.pct_above_sma_200 >= 0 ? "text-rise" : "text-fall"}>
+                        {e.pct_above_sma_200 >= 0 ? "+" : ""}
+                        {(e.pct_above_sma_200 * 100).toFixed(1)}% vs 200-day
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-hush">
+                      RSI <span className="text-parchment font-mono">{e.rsi_14?.toFixed(0) ?? "—"}</span>
                     </span>
+                    <span className="text-hush">
+                      Sentiment{" "}
+                      <span className={e.avg_news_sentiment >= 0 ? "text-rise font-mono" : "text-fall font-mono"}>
+                        {e.avg_news_sentiment.toFixed(2)}
+                      </span>
+                    </span>
+                    <span className="text-hush">
+                      Risk <span className="text-signal font-mono">{e.risk_score}</span>
+                    </span>
+                  </div>
+
+                  {c && c.strengths.length > 0 && (
+                    <p className="text-xs text-hush mt-2 leading-relaxed">{c.strengths[0]}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-4 text-xs">
-                  <span className="text-hush">
-                    RSI <span className="text-parchment font-mono">{e.rsi_14?.toFixed(0) ?? "—"}</span>
-                  </span>
-                  <span className="text-hush">
-                    Sentiment{" "}
-                    <span className={e.avg_news_sentiment >= 0 ? "text-rise font-mono" : "text-fall font-mono"}>
-                      {e.avg_news_sentiment.toFixed(2)}
-                    </span>
-                  </span>
-                  <span className="text-hush">
-                    Risk <span className="text-signal font-mono">{e.risk_score}</span>
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

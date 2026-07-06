@@ -98,6 +98,24 @@ export interface ScanRunResult {
   failed: string[];
 }
 
+export interface DimensionScoreRead {
+  name: string;
+  raw_value: number | null;
+  score: number;
+  weight: number;
+  contribution: number;
+}
+
+export interface ConfidenceRead {
+  ticker: string;
+  total_score: number;
+  recommendation: string;
+  dimensions: DimensionScoreRead[];
+  risk_adjustment_points: number;
+  strengths: string[];
+  risks: string[];
+}
+
 export const api = {
   register: (email: string, password: string, fullName?: string) =>
     request<UserRead>("/auth/register", {
@@ -145,6 +163,12 @@ export const api = {
   listEvidence: (token: string, tickers?: string[]) =>
     request<EvidencePacketRead[]>(
       `/scanner/evidence${tickers && tickers.length ? `?tickers=${tickers.join(",")}` : ""}`,
+      { token }
+    ),
+
+  listConfidence: (token: string, tickers?: string[]) =>
+    request<ConfidenceRead[]>(
+      `/confidence${tickers && tickers.length ? `?tickers=${tickers.join(",")}` : ""}`,
       { token }
     ),
 };

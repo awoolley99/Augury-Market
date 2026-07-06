@@ -10,7 +10,7 @@ recommendation.
 |---|---|---|
 | 1 | Monorepo, Docker, FastAPI + Postgres + auth, Next.js shell, Watchlist CRUD | **Done** |
 | 2 | Market data ingestion + Stock Scanner Engine (Module 6) | **Done** |
-| 3 | Confidence Score Engine (Module 7) | Not started |
+| 3 | Confidence Score Engine (Module 7) | **Done** |
 | 4 | AI Summary Engine (Module 8) | Not started |
 | 5 | Full Dashboard Data Layer + morning briefing (Module 9/10) | Not started |
 
@@ -95,6 +95,19 @@ against known values), risk analyzer (volatility + drawdown + negative-news
 heuristics), and evidence packet storage, all wired to a live `/scanner/run`
 endpoint and rendered on the dashboard. Verified end-to-end against a real
 Postgres instance (not just SQLite/mocks) during development.
+
+**Real and tested (Milestone 3):** the Confidence Score Engine (ADR 0004) —
+a deterministic weighted formula (business quality 30%, momentum 20%,
+valuation 10%, news/catalysts 15%, institutional activity 15%, sentiment
+10%, minus a risk adjustment) over each evidence packet, producing a 0-10
+score and a Strong Buy / Buy / Watch-Hold / Avoid recommendation. Same
+evidence always produces the same score — no AI involved yet (that's
+Milestone 4). Verified against the full 35-ticker sample universe, not just
+hand-picked test cases: this caught and fixed a real bug where the stub
+market data provider drew every fundamental independently per ticker,
+causing every single stock to regress to the same mediocre score and land
+in "Avoid" — fixed by correlating fundamentals through a per-ticker quality
+factor, the way real companies' metrics actually move together.
 
 **Deliberately stubbed:** market data comes from `StubMarketDataProvider` —
 deterministic synthetic prices/fundamentals/news, not real market data (see
