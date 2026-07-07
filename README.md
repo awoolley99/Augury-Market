@@ -11,7 +11,7 @@ recommendation.
 | 1 | Monorepo, Docker, FastAPI + Postgres + auth, Next.js shell, Watchlist CRUD | **Done** |
 | 2 | Market data ingestion + Stock Scanner Engine (Module 6) | **Done** |
 | 3 | Confidence Score Engine (Module 7) | **Done** |
-| 4 | AI Summary Engine (Module 8) | Not started |
+| 4 | AI Summary Engine (Module 8) | **Done** |
 | 5 | Full Dashboard Data Layer + morning briefing (Module 9/10) | Not started |
 
 See `docs/adr/` for the reasoning behind the core architectural choices, and
@@ -108,6 +108,22 @@ market data provider drew every fundamental independently per ticker,
 causing every single stock to regress to the same mediocre score and land
 in "Avoid" — fixed by correlating fundamentals through a per-ticker quality
 factor, the way real companies' metrics actually move together.
+
+**Real and tested (Milestone 4):** the AI Summary Engine (Module 8) — turns
+an evidence packet + its already-computed confidence score into a research
+report (headline, why it ranked, primary risks, suggested hold period,
+catalyst strength, what would change the thesis), cached per (ticker, date)
+so a real LLM isn't called more than once a day per ticker. Two providers,
+selected via `AI_SUMMARY_PROVIDER`:
+- `stub` (default): free, offline, rule-based — reuses the confidence
+  engine's own strengths/risks. No API key needed.
+- `anthropic`: calls the real Claude API (`AI_SUMMARY_MODEL`, defaults to
+  `claude-haiku-4-5-20251001`) with a system prompt that's given the
+  already-computed score and explicitly told to narrate it, not invent a
+  different one (ADR 0004) — needs `ANTHROPIC_API_KEY` set.
+Click "View report" on any ticker on the dashboard to see one. The
+Anthropic-backed provider's HTTP calls are fully mocked in tests — the test
+suite never makes real (or billed) API calls.
 
 **Deliberately stubbed:** market data comes from `StubMarketDataProvider` —
 deterministic synthetic prices/fundamentals/news, not real market data (see

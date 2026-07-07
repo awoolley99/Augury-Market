@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, ApiError } from "@/lib/api";
+import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, AISummaryRead, ApiError } from "@/lib/api";
 
 function firstName(fullName: string | null, email: string): string {
   if (fullName) return fullName.split(" ")[0];
@@ -29,6 +29,9 @@ export default function DashboardPage() {
   const [watchlists, setWatchlists] = useState<WatchlistRead[]>([]);
   const [evidence, setEvidence] = useState<EvidencePacketRead[]>([]);
   const [confidence, setConfidence] = useState<Record<string, ConfidenceRead>>({});
+  const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
+  const [summaries, setSummaries] = useState<Record<string, AISummaryRead>>({});
+  const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -139,6 +142,25 @@ export default function DashboardPage() {
     );
   }
 
+  async function handleToggleReport(ticker: string) {
+    if (expandedTicker === ticker) {
+      setExpandedTicker(null);
+      return;
+    }
+    setExpandedTicker(ticker);
+    if (!summaries[ticker] && accessToken) {
+      setSummaryLoading(ticker);
+      try {
+        const summary = await api.getSummary(accessToken, ticker);
+        setSummaries((prev) => ({ ...prev, [ticker]: summary }));
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Couldn't load report");
+      } finally {
+        setSummaryLoading(null);
+      }
+    }
+  }
+
   if (loading || !user) {
     return (
       <main className="min-h-screen flex items-center justify-center text-hush">
@@ -175,10 +197,10 @@ export default function DashboardPage() {
         </div>
 
         <p className="text-hush text-sm leading-relaxed mb-4">
-          Confidence scores (Module 7) are deterministic — the same weighted formula over
-          business quality, momentum, valuation, news/catalysts, institutional activity, and
-          sentiment, minus a risk adjustment. Nothing here is AI-generated commentary yet;
-          that&apos;s Milestone 4.
+          Confidence scores (Module 7) are deterministic. Click &quot;View report&quot; on any
+          ticker for an AI-narrated research note (Module 8) — by default a free rule-based
+          placeholder; set <code className="text-signal">AI_SUMMARY_PROVIDER=anthropic</code>{" "}
+          on the backend to generate real ones.
         </p>
 
         {scanMessage && <p className="text-signal text-sm mb-4">{scanMessage}</p>}
@@ -235,6 +257,87 @@ export default function DashboardPage() {
 
                   {c && c.strengths.length > 0 && (
                     <p className="text-xs text-hush mt-2 leading-relaxed">{c.strengths[0]}</p>
+                  )}
+
+                  <button
+                    onClick={() => handleToggleReport(e.ticker)}
+                    className="text-xs text-signal hover:underline mt-3"
+                  >
+                    {expandedTicker === e.ticker ? "Hide report" : "View report"}
+                  </button>
+
+                  {expandedTicker === e.ticker && (
+                    <div className="mt-3 pt-3 border-t border-ink-700">
+                      {summaryLoading === e.ticker ? (
+                        <p className="text-xs text-hush">Reading the signs…</p>
+                      ) : summaries[e.ticker] ? (
+                        <div className="space-y-3">
+                          <p className="text-sm text-parchment leading-relaxed">
+                            {summaries[e.ticker].headline}
+                          </p>
+
+                          <div className="flex gap-4 text-xs text-hush">
+                            <span>
+                              Hold:{" "}
+                              <span className="text-parchment">
+                                {summaries[e.ticker].suggested_hold_period}
+                              </span>
+                            </span>
+                            <span>
+                              Catalyst strength:{" "}
+                              <span className="text-parchment">
+                                {summaries[e.ticker].catalyst_strength}
+                              </span>
+                            </span>
+                          </div>
+
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-hush mb-1.5">
+                              Why it ranked this way
+                            </p>
+                            <ul className="space-y-1">
+                              {summaries[e.ticker].why_it_ranked.map((line, i) => (
+                                <li key={i} className="text-xs text-parchment leading-relaxed">
+                                  · {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-hush mb-1.5">
+                              Primary risks
+                            </p>
+                            <ul className="space-y-1">
+                              {summaries[e.ticker].primary_risks.map((line, i) => (
+                                <li key={i} className="text-xs text-fall leading-relaxed">
+                                  · {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div>
+                            <p className="text-xs uppercase tracking-wide text-hush mb-1.5">
+                              What would change this thesis
+                            </p>
+                            <ul className="space-y-1">
+                              {summaries[e.ticker].thesis_breakers.map((line, i) => (
+                                <li key={i} className="text-xs text-hush leading-relaxed">
+                                  · {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {summaries[e.ticker].provider === "StubAISummaryProvider" && (
+                            <p className="text-xs text-hush italic">
+                              Rule-based placeholder — not yet generated by a real AI model.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
                   )}
                 </div>
               );

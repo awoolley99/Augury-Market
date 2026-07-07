@@ -116,6 +116,21 @@ export interface ConfidenceRead {
   risks: string[];
 }
 
+export interface AISummaryRead {
+  ticker: string;
+  as_of_date: string;
+  provider: string;
+  headline: string;
+  why_it_ranked: string[];
+  primary_risks: string[];
+  suggested_hold_period: string;
+  catalyst_strength: string;
+  thesis_breakers: string[];
+  confidence_score_at_generation: number;
+  recommendation_at_generation: string;
+  created_at: string;
+}
+
 export const api = {
   register: (email: string, password: string, fullName?: string) =>
     request<UserRead>("/auth/register", {
@@ -171,4 +186,7 @@ export const api = {
       `/confidence${tickers && tickers.length ? `?tickers=${tickers.join(",")}` : ""}`,
       { token }
     ),
+
+  getSummary: (token: string, ticker: string, force?: boolean) =>
+    request<AISummaryRead>(`/summary/${ticker}${force ? "?force=true" : ""}`, { token }),
 };

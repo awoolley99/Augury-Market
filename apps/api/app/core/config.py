@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     MARKET_DATA_API_KEY: str | None = None
 
     # --- AI provider (Milestone 4) ---
+    AI_SUMMARY_PROVIDER: str = "stub"  # stub | anthropic
+    AI_SUMMARY_MODEL: str = "claude-haiku-4-5-20251001"
     ANTHROPIC_API_KEY: str | None = None
 
     @field_validator("MARKET_DATA_PROVIDER")
