@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, AISummaryRead, ApiError } from "@/lib/api";
+import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, AISummaryRead, DashboardBriefingRead, ApiError } from "@/lib/api";
 
 function firstName(fullName: string | null, email: string): string {
   if (fullName) return fullName.split(" ")[0];
@@ -32,6 +32,7 @@ export default function DashboardPage() {
   const [expandedTicker, setExpandedTicker] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<Record<string, AISummaryRead>>({});
   const [summaryLoading, setSummaryLoading] = useState<string | null>(null);
+  const [briefing, setBriefing] = useState<DashboardBriefingRead | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -74,6 +75,11 @@ export default function DashboardPage() {
       .catch(() => setConfidence({}));
   }, [accessToken, watchlists]);
 
+  useEffect(() => {
+    if (!accessToken) return;
+    api.getBriefing(accessToken).then(setBriefing).catch(() => setBriefing(null));
+  }, [accessToken, watchlists]);
+
   async function handleRunScan() {
     if (!accessToken) return;
     setScanning(true);
@@ -92,6 +98,8 @@ export default function DashboardPage() {
         const freshConfidence = await api.listConfidence(accessToken, allTickers);
         setConfidence(Object.fromEntries(freshConfidence.map((r) => [r.ticker, r])));
       }
+      const freshBriefing = await api.getBriefing(accessToken);
+      setBriefing(freshBriefing);
     } catch (err) {
       setScanMessage(err instanceof ApiError ? err.message : "Scan failed.");
     } finally {
@@ -171,10 +179,25 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen px-6 py-10 max-w-4xl mx-auto">
-      <header className="flex items-start justify-between mb-10">
+      <header className="flex items-start justify-between mb-6">
         <div>
           <p className="text-hush text-sm mb-1">Good morning, {firstName(user.full_name, user.email)}</p>
-          <h1 className="font-display text-3xl text-parchment">Your briefing</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="font-display text-3xl text-parchment">Your briefing</h1>
+            {briefing && briefing.market_overview.tickers_scanned > 0 && (
+              <span
+                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${recommendationColor(
+                  briefing.market_overview.market_health_label === "Bullish"
+                    ? "Buy Candidate"
+                    : briefing.market_overview.market_health_label === "Bearish"
+                    ? "Avoid"
+                    : "Watch / Hold"
+                )}`}
+              >
+                {briefing.market_overview.market_health_label}
+              </span>
+            )}
+          </div>
         </div>
         <button
           onClick={logout}
@@ -183,6 +206,90 @@ export default function DashboardPage() {
           Sign out
         </button>
       </header>
+
+      {briefing && briefing.market_overview.tickers_scanned > 0 && (
+        <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+          <div className="rounded-md border border-ink-700 bg-ink-900 p-3">
+            <p className="text-xs text-hush mb-1">Market Health</p>
+            <p className="font-mono text-lg text-parchment">
+              {briefing.market_overview.market_health_score}
+            </p>
+            <p className="text-xs text-hush">{briefing.market_overview.market_health_label}</p>
+          </div>
+          <div className="rounded-md border border-ink-700 bg-ink-900 p-3">
+            <p className="text-xs text-hush mb-1">Fear &amp; Greed</p>
+            <p className="font-mono text-lg text-parchment">
+              {briefing.market_overview.fear_greed_score}
+            </p>
+            <p className="text-xs text-hush">{briefing.market_overview.fear_greed_label}</p>
+          </div>
+          <div className="rounded-md border border-ink-700 bg-ink-900 p-3">
+            <p className="text-xs text-hush mb-1">Top Sector</p>
+            <p className="font-mono text-lg text-parchment">
+              {briefing.market_overview.top_sector ?? "—"}
+            </p>
+            <p className="text-xs text-hush">
+              avg {briefing.market_overview.top_sector_avg_score?.toFixed(1) ?? "—"}/10
+            </p>
+          </div>
+          <div className="rounded-md border border-ink-700 bg-ink-900 p-3">
+            <p className="text-xs text-hush mb-1">Catalysts Today</p>
+            <p className="font-mono text-lg text-parchment">
+              {briefing.market_overview.catalyst_count_today}
+            </p>
+            <p className="text-xs text-hush">of {briefing.market_overview.tickers_scanned} scanned</p>
+          </div>
+        </section>
+      )}
+
+      {briefing && briefing.top_opportunities.length > 0 && (
+        <section className="rounded-lg border border-ink-700 bg-ink-900 p-5 mb-8">
+          <h2 className="font-display text-xl text-parchment mb-3">Top opportunities</h2>
+          <div className="space-y-2">
+            {briefing.top_opportunities.map((o, i) => (
+              <div
+                key={o.ticker}
+                className="flex items-center justify-between rounded-md border border-ink-700 bg-ink-800 p-3"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-hush text-xs w-4">#{i + 1}</span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-semibold text-parchment text-sm">
+                        {o.ticker}
+                      </span>
+                      <span className="text-xs text-hush">{o.sector}</span>
+                    </div>
+                    <p className="text-xs text-hush mt-0.5">{o.top_reason}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-sm text-parchment">{o.confidence_score.toFixed(1)}</p>
+                  <span
+                    className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${recommendationColor(o.recommendation)}`}
+                  >
+                    {o.recommendation}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {briefing && briefing.recent_reports.length > 0 && (
+        <section className="rounded-lg border border-ink-700 bg-ink-900 p-5 mb-8">
+          <h2 className="font-display text-xl text-parchment mb-3">Recent AI reports</h2>
+          <div className="space-y-2">
+            {briefing.recent_reports.map((r, i) => (
+              <div key={i} className="text-sm">
+                <span className="font-mono text-parchment mr-2">{r.ticker}</span>
+                <span className="text-hush">{r.headline}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-ink-700 bg-ink-900 p-5 mb-8">
         <div className="flex items-center justify-between mb-3">

@@ -131,6 +131,47 @@ export interface AISummaryRead {
   created_at: string;
 }
 
+export interface MarketOverviewRead {
+  market_health_score: number;
+  market_health_label: string;
+  fear_greed_score: number;
+  fear_greed_label: string;
+  top_sector: string | null;
+  top_sector_avg_score: number | null;
+  tickers_scanned: number;
+  catalyst_count_today: number;
+}
+
+export interface TopOpportunityRead {
+  ticker: string;
+  sector: string;
+  confidence_score: number;
+  recommendation: string;
+  top_reason: string;
+}
+
+export interface WatchlistSummaryItemRead {
+  ticker: string;
+  confidence_score: number | null;
+  recommendation: string | null;
+  score_change: number | null;
+  top_reason: string | null;
+}
+
+export interface RecentReportRead {
+  ticker: string;
+  headline: string;
+  recommendation: string;
+  created_at: string;
+}
+
+export interface DashboardBriefingRead {
+  market_overview: MarketOverviewRead;
+  top_opportunities: TopOpportunityRead[];
+  watchlist_summary: WatchlistSummaryItemRead[];
+  recent_reports: RecentReportRead[];
+}
+
 export const api = {
   register: (email: string, password: string, fullName?: string) =>
     request<UserRead>("/auth/register", {
@@ -189,4 +230,7 @@ export const api = {
 
   getSummary: (token: string, ticker: string, force?: boolean) =>
     request<AISummaryRead>(`/summary/${ticker}${force ? "?force=true" : ""}`, { token }),
+
+  getBriefing: (token: string) =>
+    request<DashboardBriefingRead>("/dashboard/briefing", { token }),
 };

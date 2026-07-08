@@ -20,6 +20,12 @@ class AISummaryRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_recent(self, limit: int = 3) -> list[AISummary]:
+        result = await self.session.execute(
+            select(AISummary).order_by(AISummary.created_at.desc()).limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def upsert(self, data: dict) -> AISummary:
         bind = self.session.get_bind()
         if bind.dialect.name == "postgresql":

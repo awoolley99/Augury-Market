@@ -12,7 +12,10 @@ recommendation.
 | 2 | Market data ingestion + Stock Scanner Engine (Module 6) | **Done** |
 | 3 | Confidence Score Engine (Module 7) | **Done** |
 | 4 | AI Summary Engine (Module 8) | **Done** |
-| 5 | Full Dashboard Data Layer + morning briefing (Module 9/10) | Not started |
+| 5 | Full Dashboard Data Layer + morning briefing (Module 9/10) | **Done** |
+
+All 5 original milestones from the product blueprint are now built. See
+"What's next" at the bottom of this README for natural follow-ups.
 
 See `docs/adr/` for the reasoning behind the core architectural choices, and
 `docs/deploy-flyio.md` for deploying to Fly.io.
@@ -125,8 +128,55 @@ Click "View report" on any ticker on the dashboard to see one. The
 Anthropic-backed provider's HTTP calls are fully mocked in tests — the test
 suite never makes real (or billed) API calls.
 
+**Real and tested (Milestone 5):** the Dashboard Data Layer (Module 10) —
+`GET /dashboard/briefing` aggregates everything above into one response:
+a market overview (health score, fear/greed, top sector, catalyst count —
+all computed from the scanned universe's own confidence scores and
+sentiment, not a separate data source), the top 5 opportunities across the
+*whole* scanned universe ranked by confidence score, the current user's
+watchlist summary with day-over-day score deltas (when a prior day's scan
+exists), and the most recently generated AI reports. Degrades to neutral
+defaults before anything's been scanned rather than erroring. The dashboard
+UI now shows this as the actual morning-briefing view — stat strip, top
+opportunities list, recent reports — above the existing watchlist/scanner
+UI from Milestones 1-2.
+
+Building this also surfaced a real bug in the Milestone 1 watchlist code:
+`add_item`/`remove_item` were mutating the database directly without going
+through the SQLAlchemy relationship, so an already-loaded `Watchlist.items`
+collection in memory could go stale within a single long-lived session (the
+per-request API sessions never hit this, since each request gets a fresh
+session — the dashboard was the first thing to reuse one session across
+multiple service calls). Fixed by going through the relationship so cascade
+and in-memory consistency are handled correctly.
+
 **Deliberately stubbed:** market data comes from `StubMarketDataProvider` —
 deterministic synthetic prices/fundamentals/news, not real market data (see
-ADR 0005). No real vendor (Polygon/Alpaca/IEX) is wired up yet, and there's
-no Confidence Score, AI summary, or "Buy/Avoid" recommendation anywhere —
-those are Modules 7/8 (Milestones 3/4).
+ADR 0005). No real vendor (Polygon/Alpaca/IEX) is wired up yet. AI summaries
+default to the free `stub` provider rather than a real Anthropic API call
+(see Milestone 4 above for how to switch that on).
+
+## What's next
+
+All 5 milestones from the original blueprint are built. Natural follow-ups,
+roughly in order of likely value:
+
+- **A real market data vendor** (Polygon, Alpaca, IEX, or similar) behind
+  the existing `MarketDataProvider` interface — the biggest lever for making
+  this a real product instead of a demo, since everything downstream
+  (scanner, scoring, AI summaries, dashboard) already works against
+  whatever the provider returns.
+- **A background scheduler** so the scanner runs automatically every
+  morning instead of needing a manual "Run scanner" click (the product
+  brief's "morning briefing" framing implies this).
+- **Real S&P 500 / Nasdaq 100 / Russell 1000 / ETF membership lists**
+  instead of the curated ~35-ticker sample universe.
+- **Backtesting** (mentioned in the original product brief as a future
+  differentiator) — validating the confidence engine's weights against
+  historical evidence rather than just today's snapshot.
+- **Portfolio-aware recommendations** — the brief's "portfolio intelligence"
+  concept, weighing a new pick against what a user already holds rather
+  than scoring each ticker in isolation.
+- Visual/UX polish on the dashboard — the current UI is functional but was
+  built quickly to validate the data layer; worth a real design pass now
+  that all the underlying data is real.

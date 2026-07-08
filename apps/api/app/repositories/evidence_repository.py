@@ -75,6 +75,20 @@ class EvidenceRepository:
                 packets.append(packet)
         return packets
 
+    async def get_previous(self, ticker: str, before_date: date) -> EvidencePacket | None:
+        """The most recent packet for this ticker strictly before `before_date`
+        -- used to compute day-over-day score deltas."""
+        result = await self.session.execute(
+            select(EvidencePacket)
+            .where(
+                EvidencePacket.ticker == ticker.upper(),
+                EvidencePacket.as_of_date < before_date,
+            )
+            .order_by(EvidencePacket.as_of_date.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def list_all_latest(self) -> list[EvidencePacket]:
         result = await self.session.execute(
             select(EvidencePacket).order_by(EvidencePacket.as_of_date.desc())

@@ -38,13 +38,15 @@ class WatchlistRepository:
         await self.session.delete(watchlist)
 
     async def add_item(self, watchlist: Watchlist, ticker: str) -> WatchlistItem:
-        item = WatchlistItem(watchlist_id=watchlist.id, ticker=ticker)
-        self.session.add(item)
+        item = WatchlistItem(ticker=ticker)
+        watchlist.items.append(item)  # keeps the in-memory collection consistent
         await self.session.flush()
         return item
 
     async def remove_item(self, item: WatchlistItem) -> None:
         await self.session.delete(item)
+        if item in item.watchlist.items:
+            item.watchlist.items.remove(item)
 
     async def get_item(self, item_id: uuid.UUID, watchlist_id: uuid.UUID) -> WatchlistItem | None:
         result = await self.session.execute(
