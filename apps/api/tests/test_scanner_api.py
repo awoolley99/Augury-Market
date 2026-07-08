@@ -44,10 +44,31 @@ async def test_get_evidence_for_specific_ticker(client):
     assert resp.json()["ticker"] == "NVDA"
 
 
-async def test_get_evidence_404_before_scan(client):
+async def test_get_evidence_scans_on_demand_before_any_universe_scan(client):
+    """
+    A ticker's evidence is generated on first request, not gated behind an
+    explicit /scanner/run -- this is what makes any watchlist ticker work
+    regardless of whether it's in the pre-scanned sample universe.
+    """
     headers = await auth_headers(client)
     resp = await client.get("/api/v1/scanner/evidence/NVDA", headers=headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json()["ticker"] == "NVDA"
+
+
+async def test_evidence_list_scans_ticker_outside_sample_universe_on_demand(client):
+    """
+    Regression test for the reported bug: watchlist tickers outside
+    UniverseLoader's curated sample (e.g. ZBRA, which isn't in it) used to
+    never show up in the Market Snapshot because /scanner/evidence only
+    ever returned pre-scanned tickers. Now any requested ticker gets
+    scanned on demand.
+    """
+    headers = await auth_headers(client)
+    resp = await client.get("/api/v1/scanner/evidence?tickers=ZBRA", headers=headers)
+    assert resp.status_code == 200
+    tickers = {p["ticker"] for p in resp.json()}
+    assert tickers == {"ZBRA"}
 
 
 async def test_evidence_filtered_by_watchlist_tickers(client):

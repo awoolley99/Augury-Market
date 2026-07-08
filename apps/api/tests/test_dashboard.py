@@ -70,7 +70,13 @@ async def test_watchlist_summary_includes_users_tickers(db_session):
     assert nvda_item.score_change is None  # no prior day's data yet
 
 
-async def test_watchlist_summary_ticker_without_scan_has_null_score(db_session):
+async def test_watchlist_summary_scans_unscanned_ticker_on_demand(db_session):
+    """
+    This is the fix for the real-world bug where a watchlist ticker outside
+    the pre-scanned sample universe just never showed up: any ticker now
+    gets scanned on demand the first time it's needed, rather than only
+    being available if it happened to be in UniverseLoader's list.
+    """
     from app.repositories.user_repository import UserRepository
     from app.core.security import hash_password
 
@@ -81,15 +87,16 @@ async def test_watchlist_summary_ticker_without_scan_has_null_score(db_session):
     await db_session.commit()
 
     watchlist_service = WatchlistService(db_session)
-    watchlist = await watchlist_service.create_watchlist(user.id, "Unscanned")
-    await watchlist_service.add_ticker(watchlist.id, user.id, "ZZZZ")
+    watchlist = await watchlist_service.create_watchlist(user.id, "Not In Sample Universe")
+    # ZBRA isn't in UniverseLoader's curated sample list at all.
+    await watchlist_service.add_ticker(watchlist.id, user.id, "ZBRA")
 
     service = DashboardService(db_session)
     briefing = await service.get_briefing(user_id=user.id)
 
-    item = next(i for i in briefing.watchlist_summary if i.ticker == "ZZZZ")
-    assert item.confidence_score is None
-    assert item.recommendation is None
+    item = next(i for i in briefing.watchlist_summary if i.ticker == "ZBRA")
+    assert item.confidence_score is not None
+    assert item.recommendation is not None
 
 
 async def test_recent_reports_reflects_generated_summaries(db_session):

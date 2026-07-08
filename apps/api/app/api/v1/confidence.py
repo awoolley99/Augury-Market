@@ -7,6 +7,7 @@ from app.models.user import User
 from app.repositories.evidence_repository import EvidenceRepository
 from app.schemas.confidence import ConfidenceRead
 from app.services.confidence import compute_confidence
+from app.services.scanner import ScannerService
 
 router = APIRouter(prefix="/confidence", tags=["confidence"])
 
@@ -17,13 +18,12 @@ async def get_confidence(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    repo = EvidenceRepository(db)
-    packet = await repo.get_latest(ticker)
-    if not packet:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No evidence packet found for {ticker.upper()}. Run a scan first.",
-        )
+    scanner = ScannerService(db)
+    try:
+        packet = await scanner.ensure_scanned(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
     result = compute_confidence(packet)
     return ConfidenceRead(
         ticker=result.ticker,
@@ -42,11 +42,17 @@ async def list_confidence(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    repo = EvidenceRepository(db)
     if tickers:
         ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
-        packets = await repo.list_latest_for_tickers(ticker_list)
+        scanner = ScannerService(db)
+        packets = []
+        for ticker in ticker_list:
+            try:
+                packets.append(await scanner.ensure_scanned(ticker))
+            except ValueError:
+                continue
     else:
+        repo = EvidenceRepository(db)
         packets = await repo.list_all_latest()
 
     results = []

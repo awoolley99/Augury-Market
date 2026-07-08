@@ -82,6 +82,27 @@ class ScannerService:
         packet_data = self.build_packet_data(ticker, as_of)
         return await self.repo.upsert(packet_data)
 
+    async def ensure_scanned(self, ticker: str) -> EvidencePacket:
+        """
+        Returns the latest evidence packet for `ticker`, scanning it on
+        demand if none exists yet. This is what makes ANY ticker usable
+        (watchlists, confidence, AI summaries, the dashboard) regardless of
+        whether it's in the curated sample universe that `scan_universe`
+        batch-processes -- the universe list only controls what gets
+        pre-scanned in bulk for the "Top Opportunities" ranking, not what
+        CAN be scanned. A real market data provider would make this the
+        only scanning path that matters at real scale; universe batch
+        scanning stays useful for ranking a known set, not for gating
+        whether an individual ticker can be looked up at all.
+        """
+        existing = await self.repo.get_latest(ticker)
+        if existing:
+            return existing
+
+        packet = await self.scan_ticker(ticker)
+        await self.session.commit()
+        return packet
+
     async def scan_universe(self, as_of: date | None = None) -> ScanResult:
         as_of = as_of or date.today()
         result = ScanResult()

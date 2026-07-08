@@ -16,10 +16,11 @@ async def auth_headers(client):
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_summary_requires_scan_first(client):
+async def test_summary_scans_on_demand_without_prior_scan(client):
     headers = await auth_headers(client)
     resp = await client.get("/api/v1/summary/NVDA", headers=headers)
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json()["ticker"] == "NVDA"
 
 
 async def test_summary_generated_after_scan(client):

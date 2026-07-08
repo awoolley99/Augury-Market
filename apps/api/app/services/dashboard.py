@@ -24,6 +24,7 @@ from app.repositories.ai_summary_repository import AISummaryRepository
 from app.repositories.evidence_repository import EvidenceRepository
 from app.repositories.watchlist_repository import WatchlistRepository
 from app.services.confidence import ConfidenceResult, compute_confidence
+from app.services.scanner import ScannerService
 
 
 @dataclass(frozen=True)
@@ -94,6 +95,7 @@ class DashboardService:
         self.evidence_repo = EvidenceRepository(session)
         self.summary_repo = AISummaryRepository(session)
         self.watchlist_repo = WatchlistRepository(session)
+        self.scanner = ScannerService(session)
 
     async def _scored_universe(self) -> list[tuple[EvidencePacket, ConfidenceResult]]:
         packets = await self.evidence_repo.list_all_latest()
@@ -163,8 +165,9 @@ class DashboardService:
 
         summary = []
         for ticker in tickers:
-            packet = await self.evidence_repo.get_latest(ticker)
-            if not packet:
+            try:
+                packet = await self.scanner.ensure_scanned(ticker)
+            except ValueError:
                 summary.append(
                     WatchlistSummaryItem(
                         ticker=ticker, confidence_score=None, recommendation=None,

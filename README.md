@@ -158,6 +158,17 @@ default to the free `stub` provider rather than a real Anthropic API call
 
 ## What's next
 
+Before the milestone follow-ups below: **any ticker now works, not just the
+curated sample universe.** Originally, tickers outside the ~35-ticker
+sample list (`UniverseLoader`) never showed up in the Market Snapshot, the
+dashboard, confidence scores, or AI summaries -- those endpoints only ever
+returned pre-scanned tickers. Fixed by adding `ScannerService.ensure_scanned`,
+which scans a ticker on demand the first time it's needed, rather than
+requiring it to be part of a batch-scanned universe. `UniverseLoader`'s
+sample list still controls what gets ranked in "Top Opportunities" (a
+curated, known set makes sense to rank), but it no longer gates what
+tickers a user can actually track.
+
 All 5 milestones from the original blueprint are built. Natural follow-ups,
 roughly in order of likely value:
 

@@ -4,9 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.user import User
-from app.repositories.evidence_repository import EvidenceRepository
 from app.schemas.ai_summary import AISummaryRead
 from app.services.ai_summary_service import AISummaryService
+from app.services.scanner import ScannerService
 
 router = APIRouter(prefix="/summary", tags=["ai-summary"])
 
@@ -20,16 +20,15 @@ async def get_summary(
 ):
     """
     Returns today's AI summary for a ticker, generating (and caching) one if
-    it doesn't exist yet. Pass ?force=true to regenerate even if a cached
-    summary already exists for today (e.g. after a fresh scan).
+    it doesn't exist yet. The ticker itself is also scanned on demand if it
+    hasn't been already. Pass ?force=true to regenerate the summary even if
+    a cached one already exists for today (e.g. after a fresh scan).
     """
-    evidence_repo = EvidenceRepository(db)
-    packet = await evidence_repo.get_latest(ticker)
-    if not packet:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No evidence packet found for {ticker.upper()}. Run a scan first.",
-        )
+    scanner = ScannerService(db)
+    try:
+        packet = await scanner.ensure_scanned(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
     service = AISummaryService(db)
     try:
