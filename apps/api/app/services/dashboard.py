@@ -7,6 +7,13 @@ market overview, top opportunities across the whole scanned universe, a
 per-user watchlist summary with day-over-day score deltas, and the most
 recent AI reports generated.
 
+Top Opportunities is personalized by the user's risk tolerance quiz result
+(app/services/risk_quiz.py) when one exists: a Conservative investor's
+ranking penalizes each ticker's own risk_score more heavily than an
+Aggressive investor's does. The underlying confidence_score shown is always
+the same official Module 7 number for everyone -- only the ranking order
+changes, never the score itself.
+
 Nothing here does its own data fetching from a market data provider --
 it only reads what the scanner (Module 6) has already persisted. If
 nothing has been scanned yet, everything degrades to empty/neutral
@@ -22,6 +29,7 @@ from app.models.ai_summary import AISummary
 from app.models.evidence import EvidencePacket
 from app.repositories.ai_summary_repository import AISummaryRepository
 from app.repositories.evidence_repository import EvidenceRepository
+from app.repositories.risk_profile_repository import RiskProfileRepository
 from app.repositories.watchlist_repository import WatchlistRepository
 from app.services.confidence import ConfidenceResult, compute_confidence
 from app.services.scanner import ScannerService
@@ -43,9 +51,26 @@ class MarketOverview:
 class TopOpportunity:
     ticker: str
     sector: str
-    confidence_score: float
+    confidence_score: float  # the official, unmodified Module 7 score
     recommendation: str
     top_reason: str
+    personalized_rank_score: float  # confidence_score adjusted for the user's risk tolerance -- ranking uses this, display should still show confidence_score as the "real" number
+
+
+# How strongly each risk tolerance level penalizes a ticker's own risk_score
+# (0-100) when ranking Top Opportunities. Conservative investors get picks
+# that are good AND low-risk; Aggressive investors get picks ranked almost
+# entirely on raw confidence, since high risk_score often correlates with
+# the higher-momentum/higher-growth names that an aggressive investor
+# actually wants to see surfaced, not filtered out.
+RISK_AVERSION_WEIGHTS: dict[str, float] = {
+    "Conservative": 1.6,
+    "Moderately Conservative": 1.1,
+    "Moderate": 0.6,
+    "Moderately Aggressive": 0.25,
+    "Aggressive": 0.0,
+}
+DEFAULT_RISK_LEVEL = "Moderate"  # used until a user takes the quiz
 
 
 @dataclass(frozen=True)
@@ -95,6 +120,7 @@ class DashboardService:
         self.evidence_repo = EvidenceRepository(session)
         self.summary_repo = AISummaryRepository(session)
         self.watchlist_repo = WatchlistRepository(session)
+        self.risk_profile_repo = RiskProfileRepository(session)
         self.scanner = ScannerService(session)
 
     async def _scored_universe(self) -> list[tuple[EvidencePacket, ConfidenceResult]]:
@@ -145,9 +171,19 @@ class DashboardService:
         )
 
     def _top_opportunities(
-        self, scored: list[tuple[EvidencePacket, ConfidenceResult]], limit: int = 5
+        self,
+        scored: list[tuple[EvidencePacket, ConfidenceResult]],
+        risk_level: str = DEFAULT_RISK_LEVEL,
+        limit: int = 5,
     ) -> list[TopOpportunity]:
-        ranked = sorted(scored, key=lambda pc: pc[1].total_score, reverse=True)[:limit]
+        aversion = RISK_AVERSION_WEIGHTS.get(risk_level, RISK_AVERSION_WEIGHTS[DEFAULT_RISK_LEVEL])
+
+        def personalized_score(pc: tuple[EvidencePacket, ConfidenceResult]) -> float:
+            packet, confidence = pc
+            risk_penalty = aversion * (packet.risk_score / 100) * 3
+            return confidence.total_score - risk_penalty
+
+        ranked = sorted(scored, key=personalized_score, reverse=True)[:limit]
         return [
             TopOpportunity(
                 ticker=p.ticker,
@@ -155,6 +191,7 @@ class DashboardService:
                 confidence_score=c.total_score,
                 recommendation=c.recommendation,
                 top_reason=c.strengths[0] if c.strengths else "No standout factor.",
+                personalized_rank_score=round(personalized_score((p, c)), 2),
             )
             for p, c in ranked
         ]
@@ -208,9 +245,12 @@ class DashboardService:
 
     async def get_briefing(self, user_id) -> DashboardBriefing:
         scored = await self._scored_universe()
+        risk_profile = await self.risk_profile_repo.get_for_user(user_id)
+        risk_level = risk_profile.risk_level if risk_profile else DEFAULT_RISK_LEVEL
+
         return DashboardBriefing(
             market_overview=self._market_overview(scored),
-            top_opportunities=self._top_opportunities(scored),
+            top_opportunities=self._top_opportunities(scored, risk_level=risk_level),
             watchlist_summary=await self._watchlist_summary(user_id),
             recent_reports=await self._recent_reports(),
         )

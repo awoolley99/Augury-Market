@@ -30,15 +30,21 @@ async def test_market_overview_reflects_scanned_universe(db_session):
     assert briefing.market_overview.top_sector is not None
 
 
-async def test_top_opportunities_are_sorted_descending_by_score(db_session):
+async def test_top_opportunities_are_sorted_descending_by_personalized_score(db_session):
     scanner = ScannerService(db_session)
     await scanner.scan_universe()
 
     service = DashboardService(db_session)
     briefing = await service.get_briefing(user_id="00000000-0000-0000-0000-000000000000")
 
-    scores = [o.confidence_score for o in briefing.top_opportunities]
-    assert scores == sorted(scores, reverse=True)
+    # Ranking is by personalized_rank_score (risk-tolerance-adjusted), not
+    # the raw confidence_score -- see test_dashboard_risk_personalization.py
+    # for tests confirming the adjustment itself. The default (no risk
+    # profile) uses "Moderate," which can reorder items with very close
+    # confidence scores but differing risk_score, so raw confidence_score
+    # alone is not guaranteed to be strictly descending.
+    personalized_scores = [o.personalized_rank_score for o in briefing.top_opportunities]
+    assert personalized_scores == sorted(personalized_scores, reverse=True)
     assert len(briefing.top_opportunities) <= 5
 
 

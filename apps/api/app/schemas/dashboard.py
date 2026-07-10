@@ -20,6 +20,7 @@ class TopOpportunityRead(BaseModel):
     confidence_score: float
     recommendation: str
     top_reason: str
+    personalized_rank_score: float
 
     model_config = {"from_attributes": True}
 

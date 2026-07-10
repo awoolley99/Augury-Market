@@ -1,6 +1,7 @@
 from app.models.ai_summary import AISummary
 from app.models.evidence import EvidencePacket
+from app.models.risk_profile import RiskProfile
 from app.models.user import User
 from app.models.watchlist import Watchlist, WatchlistItem
 
-__all__ = ["User", "Watchlist", "WatchlistItem", "EvidencePacket", "AISummary"]
+__all__ = ["User", "Watchlist", "WatchlistItem", "EvidencePacket", "AISummary", "RiskProfile"]

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { RiskQuizModal } from "@/components/RiskQuizModal";
 import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, AISummaryRead, DashboardBriefingRead, ApiError } from "@/lib/api";
 
 function firstName(fullName: string | null, email: string): string {
@@ -39,12 +40,33 @@ export default function DashboardPage() {
   const [tickerDrafts, setTickerDrafts] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
+  const [showQuiz, setShowQuiz] = useState(false);
+  const [quizChecked, setQuizChecked] = useState(false);
 
   useEffect(() => {
     if (!loading && !accessToken) {
       router.push("/login");
     }
   }, [loading, accessToken, router]);
+
+  useEffect(() => {
+    if (!accessToken || quizChecked) return;
+    api
+      .getRiskProfile(accessToken)
+      .then(() => setShowQuiz(false))
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) {
+          setShowQuiz(true); // hasn't taken the quiz yet
+        }
+      })
+      .finally(() => setQuizChecked(true));
+  }, [accessToken, quizChecked]);
+
+  function refreshBriefingAfterQuiz() {
+    if (!accessToken) return;
+    setShowQuiz(false);
+    api.getBriefing(accessToken).then(setBriefing).catch(() => {});
+  }
 
   useEffect(() => {
     if (!accessToken) return;
@@ -199,13 +221,29 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
-        <button
-          onClick={logout}
-          className="text-hush text-sm hover:text-parchment transition-colors"
-        >
-          Sign out
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowQuiz(true)}
+            className="text-hush text-sm hover:text-parchment transition-colors"
+          >
+            Retake risk quiz
+          </button>
+          <button
+            onClick={logout}
+            className="text-hush text-sm hover:text-parchment transition-colors"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
+
+      {showQuiz && accessToken && (
+        <RiskQuizModal
+          accessToken={accessToken}
+          onComplete={refreshBriefingAfterQuiz}
+          onSkip={() => setShowQuiz(false)}
+        />
+      )}
 
       {briefing && briefing.market_overview.tickers_scanned > 0 && (
         <section className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">

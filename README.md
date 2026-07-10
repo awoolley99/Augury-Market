@@ -156,6 +156,36 @@ ADR 0005). No real vendor (Polygon/Alpaca/IEX) is wired up yet. AI summaries
 default to the free `stub` provider rather than a real Anthropic API call
 (see Milestone 4 above for how to switch that on).
 
+## Risk tolerance quiz
+
+New users are shown a 7-question risk tolerance quiz right after login
+(skippable, retakeable anytime via "Retake risk quiz" in the dashboard
+header). Answers are scored A=1...E=5, summed, and mapped to a category:
+
+| Raw score | Category |
+|---|---|
+| 7-13 | Conservative |
+| 14-20 | Moderately Conservative |
+| 21-27 | Moderate |
+| 28-32 | Moderately Aggressive |
+| 33-35 | Aggressive* |
+
+*Not every question offers an E option, so 32 is actually the maximum
+attainable score with the current seven questions — "Aggressive" is
+unreachable until a question adds a 5th option. That's a property of the
+classification table as specified, not a bug.
+
+The result changes how **Top Opportunities** is ranked: each ticker's own
+risk_score (from Module 6) is penalized more heavily for Conservative users
+than for Aggressive ones when computing rank order. Critically, this only
+changes *ordering* — the confidence_score shown for a given ticker is
+always the same official Module 7 number for every user, conservative or
+aggressive (verified by a dedicated test). Users who haven't taken the quiz
+default to "Moderate."
+
+Endpoints: `GET /quiz` (question list, single source of truth for the
+frontend), `POST /quiz/submit`, `GET /quiz/profile`.
+
 ## What's next
 
 Before the milestone follow-ups below: **any ticker now works, not just the

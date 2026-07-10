@@ -148,6 +148,7 @@ export interface TopOpportunityRead {
   confidence_score: number;
   recommendation: string;
   top_reason: string;
+  personalized_rank_score: number;
 }
 
 export interface WatchlistSummaryItemRead {
@@ -170,6 +171,24 @@ export interface DashboardBriefingRead {
   top_opportunities: TopOpportunityRead[];
   watchlist_summary: WatchlistSummaryItemRead[];
   recent_reports: RecentReportRead[];
+}
+
+export interface QuizOptionRead {
+  letter: string;
+  label: string;
+}
+
+export interface QuizQuestionRead {
+  id: string;
+  prompt: string;
+  options: QuizOptionRead[];
+}
+
+export interface RiskProfileRead {
+  risk_score: number;
+  risk_level: string;
+  answers: Record<string, string>;
+  updated_at: string;
 }
 
 export const api = {
@@ -233,4 +252,16 @@ export const api = {
 
   getBriefing: (token: string) =>
     request<DashboardBriefingRead>("/dashboard/briefing", { token }),
+
+  getQuiz: (token: string) => request<QuizQuestionRead[]>("/quiz", { token }),
+
+  getRiskProfile: (token: string) =>
+    request<RiskProfileRead>("/quiz/profile", { token }),
+
+  submitQuiz: (token: string, answers: Record<string, string>) =>
+    request<RiskProfileRead>("/quiz/submit", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ answers }),
+    }),
 };
