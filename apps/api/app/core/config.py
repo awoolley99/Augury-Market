@@ -46,6 +46,14 @@ class Settings(BaseSettings):
     AI_SUMMARY_MODEL: str = "claude-haiku-4-5-20251001"
     ANTHROPIC_API_KEY: str | None = None
 
+    # --- Brokerage linking (Robinhood, etc. via SnapTrade) ---
+    BROKERAGE_PROVIDER: str = "stub"  # stub | snaptrade
+    SNAPTRADE_CLIENT_ID: str | None = None
+    SNAPTRADE_CONSUMER_KEY: str | None = None
+    # Fernet key used to encrypt each user's SnapTrade userSecret at rest.
+    # Generate with: python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    BROKERAGE_TOKEN_ENCRYPTION_KEY: str | None = None
+
     @field_validator("MARKET_DATA_PROVIDER")
     @classmethod
     def validate_provider(cls, v: str) -> str:

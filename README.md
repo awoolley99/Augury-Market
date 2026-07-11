@@ -186,6 +186,31 @@ default to "Moderate."
 Endpoints: `GET /quiz` (question list, single source of truth for the
 frontend), `POST /quiz/submit`, `GET /quiz/profile`.
 
+## Brokerage account linking (Robinhood, etc.)
+
+Users can link a real brokerage account from the dashboard ("Connect
+brokerage account" in the Your Portfolio section) to see real holdings
+alongside Augury Market's research. Robinhood itself has no public
+developer API, so this goes through SnapTrade (ADR 0006) — the user's
+actual brokerage login happens on SnapTrade's hosted Connection Portal,
+never on this app's servers; we only ever store a scoped, revocable
+`userSecret`, encrypted at rest with its own dedicated key (separate from
+the JWT signing key).
+
+Like market data and AI summaries, this is provider-based
+(`BROKERAGE_PROVIDER=stub` by default — synthetic holdings, no signup
+needed; `BROKERAGE_PROVIDER=snaptrade` for real accounts, requires your own
+`SNAPTRADE_CLIENT_ID`/`SNAPTRADE_CONSUMER_KEY` from SnapTrade, which
+requires a business signup — not something automatable from a coding
+session). See `docs/adr/0006-snaptrade-brokerage-linking.md` for the full
+reasoning, including an honest note that the exact response field parsing
+for real holdings data hasn't been verified against a live SnapTrade
+sandbox account (no network access to test it) and should be smoke-tested
+once real credentials exist.
+
+Endpoints: `GET /brokerage/status`, `POST /brokerage/connect`,
+`GET /brokerage/portfolio`, `DELETE /brokerage/connection`.
+
 ## What's next
 
 Before the milestone follow-ups below: **any ticker now works, not just the

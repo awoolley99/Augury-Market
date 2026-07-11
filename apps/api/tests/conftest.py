@@ -1,11 +1,20 @@
 import pytest_asyncio
+from cryptography.fernet import Fernet
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
+from app.core import crypto
+from app.core.config import settings
 from app.db.session import Base, get_db
 from app.main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+# Tests need a real encryption key regardless of what's (or isn't) in the
+# local .env -- set one for the whole test session so brokerage tests are
+# reproducible in CI/fresh clones without any manual setup.
+settings.BROKERAGE_TOKEN_ENCRYPTION_KEY = Fernet.generate_key().decode()
+crypto._fernet.cache_clear()
 
 
 @pytest_asyncio.fixture

@@ -191,6 +191,27 @@ export interface RiskProfileRead {
   updated_at: string;
 }
 
+export interface BrokerageStatusRead {
+  connected: boolean;
+  provider: string | null;
+  status: string | null;
+  updated_at: string | null;
+}
+
+export interface BrokerageHoldingRead {
+  symbol: string;
+  quantity: number;
+  market_value: number;
+  account_name: string;
+}
+
+export interface BrokeragePortfolioRead {
+  total_value: number;
+  cash: number;
+  holdings: BrokerageHoldingRead[];
+  connected_accounts: string[];
+}
+
 export const api = {
   register: (email: string, password: string, fullName?: string) =>
     request<UserRead>("/auth/register", {
@@ -264,4 +285,16 @@ export const api = {
       token,
       body: JSON.stringify({ answers }),
     }),
+
+  getBrokerageStatus: (token: string) =>
+    request<BrokerageStatusRead>("/brokerage/status", { token }),
+
+  connectBrokerage: (token: string) =>
+    request<{ connect_url: string }>("/brokerage/connect", { method: "POST", token }),
+
+  getBrokeragePortfolio: (token: string) =>
+    request<BrokeragePortfolioRead>("/brokerage/portfolio", { token }),
+
+  disconnectBrokerage: (token: string) =>
+    request<void>("/brokerage/connection", { method: "DELETE", token }),
 };

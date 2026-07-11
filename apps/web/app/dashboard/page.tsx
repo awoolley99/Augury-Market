@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { BrokeragePanel } from "@/components/BrokeragePanel";
 import { RiskQuizModal } from "@/components/RiskQuizModal";
 import { api, WatchlistRead, EvidencePacketRead, ConfidenceRead, AISummaryRead, DashboardBriefingRead, ApiError } from "@/lib/api";
 
@@ -279,6 +280,8 @@ export default function DashboardPage() {
           </div>
         </section>
       )}
+
+      {accessToken && <BrokeragePanel accessToken={accessToken} />}
 
       {briefing && briefing.top_opportunities.length > 0 && (
         <section className="rounded-lg border border-ink-700 bg-ink-900 p-5 mb-8">
