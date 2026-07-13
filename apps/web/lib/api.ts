@@ -8,11 +8,64 @@ export class ApiError extends Error {
   }
 }
 
+const ACCESS_KEY = "augury.accessToken";
+const REFRESH_KEY = "augury.refreshToken";
+
+// Lets auth-context.tsx know whenever this module silently refreshes the
+// access token in the background, so React state (and anything reading it)
+// stays in sync instead of holding a stale token until the next full login.
+let onTokenRefreshed: ((accessToken: string) => void) | null = null;
+let onAuthExpired: (() => void) | null = null;
+
+export function setTokenRefreshHandlers(handlers: {
+  onTokenRefreshed?: (accessToken: string) => void;
+  onAuthExpired?: () => void;
+}) {
+  onTokenRefreshed = handlers.onTokenRefreshed ?? null;
+  onAuthExpired = handlers.onAuthExpired ?? null;
+}
+
+export function storeTokens(accessToken: string, refreshToken: string) {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(ACCESS_KEY, accessToken);
+  sessionStorage.setItem(REFRESH_KEY, refreshToken);
+}
+
+export function getStoredAccessToken(): string | null {
+  return typeof window !== "undefined" ? sessionStorage.getItem(ACCESS_KEY) : null;
+}
+
+function getStoredRefreshToken(): string | null {
+  return typeof window !== "undefined" ? sessionStorage.getItem(REFRESH_KEY) : null;
+}
+
+export function clearStoredTokens() {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(ACCESS_KEY);
+  sessionStorage.removeItem(REFRESH_KEY);
+}
+
+// Bypasses the shared `request()` wrapper deliberately -- refreshing must
+// never itself trigger another refresh-and-retry cycle.
+async function rawRefresh(refreshToken: string): Promise<TokenPair> {
+  const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  });
+  if (!res.ok) {
+    throw new ApiError("Session expired", res.status);
+  }
+  return res.json();
+}
+
+const NO_RETRY_PATHS = ["/auth/login", "/auth/register", "/auth/refresh"];
+
 async function request<T>(
   path: string,
-  options: RequestInit & { token?: string } = {}
+  options: RequestInit & { token?: string; _isRetry?: boolean } = {}
 ): Promise<T> {
-  const { token, headers, ...rest } = options;
+  const { token, headers, _isRetry, ...rest } = options;
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...rest,
@@ -24,6 +77,23 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    if (res.status === 401 && !_isRetry && !NO_RETRY_PATHS.includes(path)) {
+      const refreshToken = getStoredRefreshToken();
+      if (refreshToken) {
+        try {
+          const fresh = await rawRefresh(refreshToken);
+          storeTokens(fresh.access_token, fresh.refresh_token);
+          onTokenRefreshed?.(fresh.access_token);
+          return request<T>(path, { ...options, token: fresh.access_token, _isRetry: true });
+        } catch {
+          clearStoredTokens();
+          onAuthExpired?.();
+        }
+      } else {
+        onAuthExpired?.();
+      }
+    }
+
     let detail = res.statusText;
     try {
       const body = await res.json();

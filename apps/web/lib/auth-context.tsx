@@ -1,7 +1,14 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-import { api, UserRead } from "./api";
+import {
+  api,
+  UserRead,
+  storeTokens,
+  getStoredAccessToken,
+  clearStoredTokens,
+  setTokenRefreshHandlers,
+} from "./api";
 
 interface AuthState {
   user: UserRead | null;
@@ -14,15 +21,30 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
-const STORAGE_KEY = "augury.accessToken";
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserRead | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const stored = typeof window !== "undefined" ? sessionStorage.getItem(STORAGE_KEY) : null;
+    // Whenever api.ts silently refreshes an expired access token in the
+    // background (see request()'s 401-retry logic), keep React state in
+    // sync so every component reading accessToken sees the fresh one --
+    // otherwise components would keep sending the stale token until the
+    // next full page load.
+    setTokenRefreshHandlers({
+      onTokenRefreshed: (fresh) => setAccessToken(fresh),
+      onAuthExpired: () => {
+        clearStoredTokens();
+        setAccessToken(null);
+        setUser(null);
+      },
+    });
+    return () => setTokenRefreshHandlers({});
+  }, []);
+
+  useEffect(() => {
+    const stored = getStoredAccessToken();
     if (!stored) {
       setLoading(false);
       return;
@@ -33,14 +55,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(u);
         setAccessToken(stored);
       })
-      .catch(() => sessionStorage.removeItem(STORAGE_KEY))
+      .catch(() => clearStoredTokens())
       .finally(() => setLoading(false));
   }, []);
 
   async function login(email: string, password: string) {
     const tokens = await api.login(email, password);
     const profile = await api.me(tokens.access_token);
-    sessionStorage.setItem(STORAGE_KEY, tokens.access_token);
+    storeTokens(tokens.access_token, tokens.refresh_token);
     setAccessToken(tokens.access_token);
     setUser(profile);
   }
@@ -51,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function logout() {
-    sessionStorage.removeItem(STORAGE_KEY);
+    clearStoredTokens();
     setAccessToken(null);
     setUser(null);
   }
