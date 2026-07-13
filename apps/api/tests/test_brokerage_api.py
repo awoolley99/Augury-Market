@@ -69,6 +69,31 @@ async def test_brokerage_endpoints_require_auth(client):
     assert (await client.get("/api/v1/brokerage/portfolio")).status_code == 401
 
 
+async def test_connect_with_missing_encryption_key_returns_clean_503(client, monkeypatch):
+    """
+    Regression test: a missing BROKERAGE_TOKEN_ENCRYPTION_KEY used to
+    produce an unhandled 500 (plain-text 'Internal Server Error', not
+    JSON) -- reproduced for real against a running server before this fix,
+    not just theorized. This is exactly the scenario a fresh `git pull`
+    without an updated local .env hits, since .env is gitignored and never
+    picks up new variables added to .env.example. Must now come back as a
+    clean, actionable 503 instead.
+    """
+    from app.core import crypto
+    from app.core.config import settings
+
+    headers = await auth_headers(client)
+
+    monkeypatch.setattr(settings, "BROKERAGE_TOKEN_ENCRYPTION_KEY", None)
+    crypto._fernet.cache_clear()
+    try:
+        resp = await client.post("/api/v1/brokerage/connect", headers=headers)
+        assert resp.status_code == 503
+        assert "BROKERAGE_TOKEN_ENCRYPTION_KEY" in resp.json()["detail"]
+    finally:
+        crypto._fernet.cache_clear()
+
+
 async def test_two_users_have_independent_connections(client):
     headers_a = await auth_headers(client)
 
