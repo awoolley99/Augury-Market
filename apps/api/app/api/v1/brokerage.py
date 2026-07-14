@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from snaptrade_client.exceptions import OpenApiException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
@@ -51,6 +52,15 @@ async def connect(
     except RuntimeError as exc:
         # e.g. BROKERAGE_PROVIDER=snaptrade but keys aren't configured
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except OpenApiException as exc:
+        # A real error FROM SnapTrade itself -- bad clientId/consumerKey,
+        # a rejected request, etc. str(exc) includes SnapTrade's actual
+        # status/reason/response body, which is exactly what's needed to
+        # diagnose a real credentials/config problem.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"SnapTrade rejected the request: {exc}",
+        ) from exc
     return BrokerageConnectRead(connect_url=connect_url)
 
 
@@ -69,6 +79,11 @@ async def get_portfolio(
         # likely BROKERAGE_TOKEN_ENCRYPTION_KEY changed since this
         # connection's secret was encrypted.
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except OpenApiException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"SnapTrade rejected the request: {exc}",
+        ) from exc
 
 
 @router.delete("/connection", status_code=status.HTTP_204_NO_CONTENT)
@@ -83,3 +98,8 @@ async def disconnect(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except (EncryptionNotConfigured, ValueError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except OpenApiException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"SnapTrade rejected the request: {exc}",
+        ) from exc

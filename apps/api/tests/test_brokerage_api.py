@@ -94,6 +94,36 @@ async def test_connect_with_missing_encryption_key_returns_clean_503(client, mon
         crypto._fernet.cache_clear()
 
 
+async def test_connect_with_snaptrade_error_returns_clean_502(client, monkeypatch):
+    """
+    Regression test: when BROKERAGE_PROVIDER=snaptrade and the SnapTrade
+    API itself rejects a request (bad clientId/consumerKey, malformed
+    request, anything), the SDK raises snaptrade_client.exceptions.
+    ApiException -- which is NOT a RuntimeError, so it previously wasn't
+    caught anywhere and crashed with an opaque 500. Must now come back as
+    a clean 502 that includes SnapTrade's own error text, so a real
+    misconfiguration is actually diagnosable instead of an opaque crash.
+    """
+    from snaptrade_client.exceptions import ApiException
+
+    import app.services.brokerage_service as brokerage_service_module
+
+    headers = await auth_headers(client)
+
+    class ExplodingProvider:
+        async def register_user(self, external_user_id):
+            raise ApiException(status=401, reason="Unauthorized: invalid consumerKey")
+
+    monkeypatch.setattr(
+        brokerage_service_module, "get_brokerage_provider", lambda: ExplodingProvider()
+    )
+
+    resp = await client.post("/api/v1/brokerage/connect", headers=headers)
+    assert resp.status_code == 502
+    assert "SnapTrade rejected the request" in resp.json()["detail"]
+    assert "Unauthorized" in resp.json()["detail"]
+
+
 async def test_two_users_have_independent_connections(client):
     headers_a = await auth_headers(client)
 
